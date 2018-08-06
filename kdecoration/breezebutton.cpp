@@ -310,31 +310,15 @@ namespace Breeze
 
                 case DecorationButtonType::KeepAbove:
                 {
-                    if (isChecked())
-                    {
+                    painter->drawPolyline( QPolygonF()
+                        << QPointF( 4, 9 )
+                        << QPointF( 9, 4 )
+                        << QPointF( 14, 9 ) );
 
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 4 )
-                            << QPointF( 9, 9 )
-                            << QPointF( 14, 4 ) );
-
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 8 )
-                            << QPointF( 9, 13 )
-                            << QPointF( 14, 8 ) );
-
-                    } else {
-
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 9 )
-                            << QPointF( 9, 4 )
-                            << QPointF( 14, 9 ) );
-
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 13 )
-                            << QPointF( 9, 8 )
-                            << QPointF( 14, 13 ) );
-                    }
+                    painter->drawPolyline( QPolygonF()
+                        << QPointF( 4, 13 )
+                        << QPointF( 9, 8 )
+                        << QPointF( 14, 13 ) );
                     break;
                 }
 
