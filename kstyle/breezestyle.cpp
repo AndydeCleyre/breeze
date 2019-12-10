@@ -2578,6 +2578,7 @@ namespace Breeze
 
         // add button width and spacing
         size.rwidth() += Metrics::MenuButton_IndicatorWidth+2;
+        size.rwidth() += Metrics::Button_ItemSpacing;
 
         return size;
 
@@ -2741,15 +2742,9 @@ namespace Breeze
         // get relevant state flags
         const State& state( option->state );
         const bool autoRaise( state & State_AutoRaise );
-        const bool hasPopupMenu( toolButtonOption->features & QStyleOptionToolButton::MenuButtonPopup );
-        const bool hasInlineIndicator(
-            toolButtonOption->features&QStyleOptionToolButton::HasMenu
-            && toolButtonOption->features&QStyleOptionToolButton::PopupDelay
-            && !hasPopupMenu );
 
         const int marginWidth( autoRaise ? Metrics::ToolButton_MarginWidth : Metrics::Button_MarginWidth + Metrics::Frame_FrameWidth );
 
-        if( hasInlineIndicator ) size.rwidth() += Metrics::ToolButton_InlineIndicatorWidth;
         size = expandSize( size, marginWidth );
 
         return size;
@@ -6119,7 +6114,7 @@ namespace Breeze
             copy.rect = menuRect;
 
             if( sunken && !flat ) copy.rect.translate( 1, 1 );
-            drawPrimitive( PE_IndicatorArrowDown, &copy, painter, widget );
+            drawIndicatorArrowPrimitive( ArrowDown_Small, &copy, painter, widget );
 
         }
 
@@ -6147,7 +6142,6 @@ namespace Breeze
 
                 const int marginWidth( flat ? Metrics::ToolButton_MarginWidth : Metrics::Button_MarginWidth + Metrics::Frame_FrameWidth );
                 contentsRect = insideMargin( contentsRect, marginWidth, 0 );
-                contentsRect.setRight( contentsRect.right() - Metrics::ToolButton_InlineIndicatorWidth );
                 contentsRect = visualRect( option, contentsRect );
 
             }
@@ -6527,7 +6521,7 @@ namespace Breeze
             // angles
             const qreal first( dialAngle( sliderOption, sliderOption->minimum ) );
             const qreal last( dialAngle( sliderOption, sliderOption->maximum ) );
-            
+
             // render groove
             _helper->renderDialGroove( painter, grooveRect, grooveColor, first, last );
 

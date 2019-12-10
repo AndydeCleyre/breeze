@@ -828,7 +828,7 @@ namespace Breeze
 
         }
 
-        
+
     }
 
     //______________________________________________________________________________
@@ -1046,7 +1046,7 @@ namespace Breeze
             painter->drawRoundedRect( baseRect, radius, radius );
         }
 
-        
+
     }
 
     //______________________________________________________________________________
@@ -1070,7 +1070,7 @@ namespace Breeze
             // setup angles
             const int angleStart( first * 180 * 16 / M_PI );
             const int angleSpan( (last - first ) * 180 * 16 / M_PI );
-            
+
             // setup pen
             if( angleSpan != 0 )
             {
@@ -1082,7 +1082,7 @@ namespace Breeze
             }
         }
 
-        
+
     }
 
     //______________________________________________________________________________
@@ -1121,7 +1121,7 @@ namespace Breeze
 
         }
 
-        
+
     }
 
     //______________________________________________________________________________
@@ -1188,7 +1188,7 @@ namespace Breeze
             painter->drawRoundedRect( baseRect, radius, radius );
         }
 
-        
+
     }
 
 
@@ -1267,7 +1267,7 @@ namespace Breeze
             painter->drawRoundedRect( baseRect, radius, radius );
         }
 
-        
+
     }
 
     //______________________________________________________________________________
@@ -1312,6 +1312,7 @@ namespace Breeze
             case ArrowDown: arrow = QVector<QPointF>{QPointF( -4, -2 ), QPointF( 0, 2 ), QPointF( 4, -2 )}; break;
             case ArrowLeft: arrow = QVector<QPointF>{QPointF( 2, -4 ), QPointF( -2, 0 ), QPointF( 2, 4 )}; break;
             case ArrowRight: arrow = QVector<QPointF>{QPointF( -2, -4 ), QPointF( 2, 0 ), QPointF( -2, 4 )}; break;
+            case ArrowDown_Small: arrow = QVector<QPointF>{QPointF( 2, 4 ), QPointF( 4, 6 ), QPointF( 6, 4 )}; break;
             default: break;
         }
 
