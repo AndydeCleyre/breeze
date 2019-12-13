@@ -72,7 +72,7 @@ namespace Breeze
         //! in Standalone mode the button is not using the decoration metrics but its geometry
         m_iconSize = QSize(-1, -1);
     }
-            
+
     //__________________________________________________________________
     Button *Button::create(DecorationButtonType type, KDecoration2::Decoration *decoration, QObject *parent)
     {
@@ -275,27 +275,12 @@ namespace Breeze
 
                 case DecorationButtonType::Shade:
                 {
-
-                    if (isChecked())
-                    {
-
-                        painter->drawLine( QPointF( 4, 5.5 ), QPointF( 14, 5.5 ) );
-                        painter->drawPolyline( QVector<QPointF> {
-                            QPointF( 4, 8 ),
-                            QPointF( 9, 13 ),
-                            QPointF( 14, 8 )} );
-
-                    } else {
-
-                        painter->drawLine( QPointF( 4, 5.5 ), QPointF( 14, 5.5 ) );
-                        painter->drawPolyline(  QVector<QPointF> {
-                            QPointF( 4, 13 ),
-                            QPointF( 9, 8 ),
-                            QPointF( 14, 13 ) });
-                    }
-
+                    painter->drawLine( QPointF( 4, 5.5 ), QPointF( 14, 5.5 ) );
+                    painter->drawPolyline(  QVector<QPointF> {
+                        QPointF( 4, 13 ),
+                        QPointF( 9, 8 ),
+                        QPointF( 14, 13 ) });
                     break;
-
                 }
 
                 case DecorationButtonType::KeepBelow:
