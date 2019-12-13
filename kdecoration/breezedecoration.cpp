@@ -1,6 +1,7 @@
 /*
 * Copyright 2014  Martin Gräßlin <mgraesslin@kde.org>
 * Copyright 2014  Hugo Pereira Da Costa <hugo.pereira@free.fr>
+* Copyright 2018  Vlad Zagorodniy <vladzzag@gmail.com>
 *
 * This program is free software; you can redistribute it and/or
 * modify it under the terms of the GNU General Public License as
@@ -29,7 +30,7 @@
 #include "breezebutton.h"
 #include "breezesizegrip.h"
 
-#include "breezeboxshadowhelper.h"
+#include "breezeboxshadowrenderer.h"
 
 #include <KDecoration2/DecoratedClient>
 #include <KDecoration2/DecorationButtonGroup>
@@ -44,6 +45,7 @@
 #include <QPainter>
 #include <QTextStream>
 #include <QTimer>
+#include <QVariantAnimation>
 
 #if BREEZE_HAVE_X11
 #include <QX11Info>
@@ -103,23 +105,23 @@ namespace
         // Small
         CompositeShadowParams(
             QPoint(0, 4),
-            ShadowParams(QPoint(0, 0), 16, 0.6),
-            ShadowParams(QPoint(0, -2), 4, 0.14)),
+            ShadowParams(QPoint(0, 0), 16, 1),
+            ShadowParams(QPoint(0, -2), 8, 0.4)),
         // Medium
         CompositeShadowParams(
             QPoint(0, 8),
-            ShadowParams(QPoint(0, 0), 32, 0.7),
-            ShadowParams(QPoint(0, -5), 14, 0.12)),
+            ShadowParams(QPoint(0, 0), 32, 0.9),
+            ShadowParams(QPoint(0, -4), 16, 0.3)),
         // Large
         CompositeShadowParams(
-            QPoint(0, 18),
-            ShadowParams(QPoint(0, 0), 64, 0.8),
-            ShadowParams(QPoint(0, -10), 24, 0.1)),
+            QPoint(0, 12),
+            ShadowParams(QPoint(0, 0), 48, 0.8),
+            ShadowParams(QPoint(0, -6), 24, 0.2)),
         // Very large
         CompositeShadowParams(
-            QPoint(0, 26),
-            ShadowParams(QPoint(0, 0), 96, 0.95),
-            ShadowParams(QPoint(0, -12), 28, 0.1))
+            QPoint(0, 16),
+            ShadowParams(QPoint(0, 0), 64, 0.7),
+            ShadowParams(QPoint(0, -8), 32, 0.1)),
     };
 
     inline CompositeShadowParams lookupShadowParams(int size)
@@ -158,7 +160,7 @@ namespace Breeze
     //________________________________________________________________
     Decoration::Decoration(QObject *parent, const QVariantList &args)
         : KDecoration2::Decoration(parent, args)
-        , m_animation( new QPropertyAnimation( this ) )
+        , m_animation( new QVariantAnimation( this ) )
     {
         g_sDecoCount++;
     }
@@ -192,7 +194,7 @@ namespace Breeze
 
         auto c = client().data();
         if( hideTitleBar() ) return c->color( ColorGroup::Inactive, ColorRole::TitleBar );
-        else if( m_animation->state() == QPropertyAnimation::Running )
+        else if( m_animation->state() == QAbstractAnimation::Running )
         {
             return KColorUtils::mix(
                 c->color( ColorGroup::Inactive, ColorRole::TitleBar ),
@@ -208,7 +210,7 @@ namespace Breeze
 
         auto c( client().data() );
         if( !m_internalSettings->drawTitleBarSeparator() ) return QColor();
-        if( m_animation->state() == QPropertyAnimation::Running )
+        if( m_animation->state() == QAbstractAnimation::Running )
         {
             QColor color( c->palette().color( QPalette::Highlight ) );
             color.setAlpha( color.alpha()*m_opacity );
@@ -222,7 +224,7 @@ namespace Breeze
     {
 
         auto c = client().data();
-        if( m_animation->state() == QPropertyAnimation::Running )
+        if( m_animation->state() == QAbstractAnimation::Running )
         {
             return KColorUtils::mix(
                 c->color( ColorGroup::Inactive, ColorRole::Foreground ),
@@ -238,11 +240,13 @@ namespace Breeze
         auto c = client().data();
 
         // active state change animation
-        m_animation->setStartValue( 0 );
+        // It is important start and end value are of the same type, hence 0.0 and not just 0
+        m_animation->setStartValue( 0.0 );
         m_animation->setEndValue( 1.0 );
-        m_animation->setTargetObject( this );
-        m_animation->setPropertyName( "opacity" );
         m_animation->setEasingCurve( QEasingCurve::InOutQuad );
+        connect(m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+            setOpacity(value.toReal());
+        });
 
         reconfigure();
         updateTitleBar();
@@ -309,8 +313,8 @@ namespace Breeze
         {
 
             auto c = client().data();
-            m_animation->setDirection( c->isActive() ? QPropertyAnimation::Forward : QPropertyAnimation::Backward );
-            if( m_animation->state() != QPropertyAnimation::Running ) m_animation->start();
+            m_animation->setDirection( c->isActive() ? QAbstractAnimation::Forward : QAbstractAnimation::Backward );
+            if( m_animation->state() != QAbstractAnimation::Running ) m_animation->start();
 
         } else {
 
@@ -422,10 +426,10 @@ namespace Breeze
         int extBottom = 0;
         if( hasNoBorders() )
         {
-            extSides = extSize;
-            extBottom = extSize;
+            if( !isMaximizedHorizontally() ) extSides = extSize;
+            if( !isMaximizedVertically() ) extBottom = extSize;
 
-        } else if( hasNoSideBorders() ) {
+        } else if( hasNoSideBorders() && !isMaximizedHorizontally() ) {
 
             extSides = extSize;
 
@@ -729,43 +733,37 @@ namespace Breeze
                 return c;
             };
 
-            // In order to properly render a box shadow with a given radius `shadowSize`,
-            // the box size should be at least `2 * QSize(shadowSize, shadowSize)`.
-            const int shadowSize = qMax(params.shadow1.radius, params.shadow2.radius);
-            const QRect box(shadowSize, shadowSize, 2 * shadowSize + 1, 2 * shadowSize + 1);
-            const QRect rect = box.adjusted(-shadowSize, -shadowSize, shadowSize, shadowSize);
+            const QSize boxSize = BoxShadowRenderer::calculateMinimumBoxSize(params.shadow1.radius)
+                .expandedTo(BoxShadowRenderer::calculateMinimumBoxSize(params.shadow2.radius));
 
-            QImage shadow(rect.size(), QImage::Format_ARGB32_Premultiplied);
-            shadow.fill(Qt::transparent);
-
-            QPainter painter(&shadow);
-            painter.setRenderHint(QPainter::Antialiasing);
+            BoxShadowRenderer shadowRenderer;
+            shadowRenderer.setBorderRadius(Metrics::Frame_FrameRadius + 0.5);
+            shadowRenderer.setBoxSize(boxSize);
+            shadowRenderer.setDevicePixelRatio(1.0); // TODO: Create HiDPI shadows?
 
             const qreal strength = static_cast<qreal>(g_shadowStrength) / 255.0;
-
-            // Draw the "shape" shadow.
-            BoxShadowHelper::boxShadow(
-                &painter,
-                box,
-                params.shadow1.offset,
-                params.shadow1.radius,
+            shadowRenderer.addShadow(params.shadow1.offset, params.shadow1.radius,
                 withOpacity(g_shadowColor, params.shadow1.opacity * strength));
-
-            // Draw the "contrast" shadow.
-            BoxShadowHelper::boxShadow(
-                &painter,
-                box,
-                params.shadow2.offset,
-                params.shadow2.radius,
+            shadowRenderer.addShadow(params.shadow2.offset, params.shadow2.radius,
                 withOpacity(g_shadowColor, params.shadow2.opacity * strength));
+
+            QImage shadowTexture = shadowRenderer.render();
+
+            QPainter painter(&shadowTexture);
+            painter.setRenderHint(QPainter::Antialiasing);
+
+            const QRect outerRect = shadowTexture.rect();
+
+            QRect boxRect(QPoint(0, 0), boxSize);
+            boxRect.moveCenter(outerRect.center());
 
             // Mask out inner rect.
             const QMargins padding = QMargins(
-                shadowSize - Metrics::Shadow_Overlap - params.offset.x(),
-                shadowSize - Metrics::Shadow_Overlap - params.offset.y(),
-                shadowSize - Metrics::Shadow_Overlap + params.offset.x(),
-                shadowSize - Metrics::Shadow_Overlap + params.offset.y());
-            const QRect innerRect = rect - padding;
+                boxRect.left() - outerRect.left() - Metrics::Shadow_Overlap - params.offset.x(),
+                boxRect.top() - outerRect.top() - Metrics::Shadow_Overlap - params.offset.y(),
+                outerRect.right() - boxRect.right() - Metrics::Shadow_Overlap + params.offset.x(),
+                outerRect.bottom() - boxRect.bottom() - Metrics::Shadow_Overlap + params.offset.y());
+            const QRect innerRect = outerRect - padding;
 
             painter.setPen(Qt::NoPen);
             painter.setBrush(Qt::black);
@@ -788,8 +786,8 @@ namespace Breeze
 
             g_sShadow = QSharedPointer<KDecoration2::DecorationShadow>::create();
             g_sShadow->setPadding(padding);
-            g_sShadow->setInnerShadowRect(QRect(shadow.rect().center(), QSize(1, 1)));
-            g_sShadow->setShadow(shadow);
+            g_sShadow->setInnerShadowRect(QRect(outerRect.center(), QSize(1, 1)));
+            g_sShadow->setShadow(shadowTexture);
         }
 
         setShadow(g_sShadow);

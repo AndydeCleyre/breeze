@@ -26,11 +26,14 @@
 
 #include <QWidget>
 #include <QPaintEvent>
+#include <QPointer>
 
 #include "breezetileset.h"
 
 namespace Breeze
 {
+
+    class ShadowHelper;
 
     //* frame shadow
     /** this allows the shadow to be painted over the widgets viewport */
@@ -42,7 +45,7 @@ namespace Breeze
         public:
 
         //* constructor
-        explicit MdiWindowShadow( QWidget*, TileSet );
+        explicit MdiWindowShadow( QWidget*, const TileSet & );
 
         //* update geometry
         void updateGeometry();
@@ -61,7 +64,7 @@ namespace Breeze
         protected:
 
         //* painting
-        virtual void paintEvent(QPaintEvent *);
+        void paintEvent(QPaintEvent *) override;
 
         private:
 
@@ -87,13 +90,9 @@ namespace Breeze
         //* constructor
         explicit MdiWindowShadowFactory( QObject* );
 
-        //* destructor
-        virtual ~MdiWindowShadowFactory()
-        {}
-
-        //* set shadow tiles
-        void setShadowTiles( const TileSet& shadowTiles )
-        { _shadowTiles = shadowTiles; }
+        //* set shadow helper
+        void setShadowHelper( ShadowHelper* shadowHelper )
+        { _shadowHelper = shadowHelper; }
 
         //* register widget
         bool registerWidget( QWidget* );
@@ -106,7 +105,7 @@ namespace Breeze
         { return _registeredWidgets.contains( widget ); }
 
         //* event filter
-        virtual bool eventFilter( QObject*, QEvent*);
+        bool eventFilter( QObject*, QEvent*) override;
 
         protected:
 
@@ -160,8 +159,8 @@ namespace Breeze
         //* set of registered widgets
         QSet<const QObject*> _registeredWidgets;
 
-        //* tileset used to draw shadow
-        TileSet _shadowTiles;
+        //* shadow helper used to generate the shadows
+        QPointer<ShadowHelper> _shadowHelper;
 
     };
 

@@ -20,6 +20,7 @@
 #include "breezemdiwindowshadow.h"
 
 #include "breeze.h"
+#include "breezeboxshadowrenderer.h"
 #include "breezeshadowhelper.h"
 #include "breezestyleconfigdata.h"
 
@@ -32,7 +33,7 @@ namespace Breeze
 {
 
     //____________________________________________________________________
-    MdiWindowShadow::MdiWindowShadow( QWidget* parent, TileSet shadowTiles ):
+    MdiWindowShadow::MdiWindowShadow( QWidget* parent, const TileSet &shadowTiles ):
         QWidget( parent ),
         _shadowTiles( shadowTiles )
     {
@@ -50,12 +51,21 @@ namespace Breeze
         const CompositeShadowParams params = ShadowHelper::lookupShadowParams( StyleConfigData::shadowSize() );
         if( params.isNone() ) return;
 
-        const int shadowSize = qMax( params.shadow1.radius, params.shadow2.radius );
-        const int size( shadowSize - Metrics::Shadow_Overlap );
-        const int topSize( size - params.offset.y() );
-        const int bottomSize( size + params.offset.y() );
-        const int leftSize( size - params.offset.x() );
-        const int rightSize( size + params.offset.x() );
+        const QSize boxSize = BoxShadowRenderer::calculateMinimumBoxSize(params.shadow1.radius)
+            .expandedTo(BoxShadowRenderer::calculateMinimumBoxSize(params.shadow2.radius));
+
+        const QSize shadowSize = BoxShadowRenderer::calculateMinimumShadowTextureSize(boxSize, params.shadow1.radius, params.shadow1.offset)
+            .expandedTo(BoxShadowRenderer::calculateMinimumShadowTextureSize(boxSize, params.shadow2.radius, params.shadow2.offset));
+
+        const QRect shadowRect(QPoint(0, 0), shadowSize);
+
+        QRect boxRect(QPoint(0, 0), boxSize);
+        boxRect.moveCenter(shadowRect.center());
+
+        const int topSize( boxRect.top() - shadowRect.top() - Metrics::Shadow_Overlap - params.offset.y() );
+        const int bottomSize( shadowRect.bottom() - boxRect.bottom() - Metrics::Shadow_Overlap + params.offset.y() );
+        const int leftSize( boxRect.left() - shadowRect.left() - Metrics::Shadow_Overlap - params.offset.x() );
+        const int rightSize( shadowRect.right() - boxRect.right() - Metrics::Shadow_Overlap + params.offset.x() );
 
         // get tileSet rect
         auto hole = _widget->frameGeometry();
@@ -130,7 +140,7 @@ namespace Breeze
         // store in set
         _registeredWidgets.insert( widget );
 
-        // create shadow immediatly if widget is already visible
+        // create shadow immediately if widget is already visible
         if( widget->isVisible() )
         {
             installShadow( widget );
@@ -228,8 +238,10 @@ namespace Breeze
         // make sure shadow is not already installed
         if( findShadow( object ) ) return;
 
+        if ( !_shadowHelper ) return;
+
         // create new shadow
-        auto windowShadow( new MdiWindowShadow( widget->parentWidget(), _shadowTiles ) );
+        auto windowShadow( new MdiWindowShadow( widget->parentWidget(), _shadowHelper->shadowTiles() ) );
         windowShadow->setWidget( widget );
 
     }

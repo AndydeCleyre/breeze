@@ -11,9 +11,6 @@ if (BREEZE_COMMON_USE_KDE4)
 endif ()
 
 ################# dependencies #################
-### FFTW
-find_package(FFTW REQUIRED)
-
 ### Qt/KDE
 if (NOT BREEZE_COMMON_USE_KDE4)
     find_package(Qt5 REQUIRED CONFIG COMPONENTS Widgets)
@@ -24,7 +21,7 @@ configure_file(config-breezecommon.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-br
 
 ################# breezestyle target #################
 set(breezecommon_LIB_SRCS
-    breezeboxshadowhelper.cpp
+    breezeboxshadowrenderer.cpp
 )
 
 if (BREEZE_COMMON_USE_KDE4)
@@ -35,30 +32,27 @@ if (BREEZE_COMMON_USE_KDE4)
         EXPORT_FILE_NAME breezecommon_export.h)
 
     target_link_libraries(breezecommon4 ${KDE4_KDEUI_LIBS})
-    target_link_libraries(breezecommon4 ${FFTW_LIBRARIES})
 
     set_target_properties(breezecommon4 PROPERTIES
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR})
 
-    install(TARGETS breezecommon4 ${INSTALL_TARGETS_DEFAULT_ARGS})
+    install(TARGETS breezecommon4 ${INSTALL_TARGETS_DEFAULT_ARGS} LIBRARY NAMELINK_SKIP)
 else ()
-    add_library(breezecommon ${breezecommon_LIB_SRCS})
+    add_library(breezecommon5 ${breezecommon_LIB_SRCS})
 
-    generate_export_header(breezecommon
+    generate_export_header(breezecommon5
         BASE_NAME breezecommon
         EXPORT_FILE_NAME breezecommon_export.h)
 
-    target_link_libraries(breezecommon
+    target_link_libraries(breezecommon5
         PUBLIC
             Qt5::Core
-            Qt5::Gui
-        PRIVATE
-            ${FFTW_LIBRARIES})
+            Qt5::Gui)
 
-    set_target_properties(breezecommon PROPERTIES
+    set_target_properties(breezecommon5 PROPERTIES
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR})
 
-    install(TARGETS breezecommon ${INSTALL_TARGETS_DEFAULT_ARGS})
+    install(TARGETS breezecommon5 ${INSTALL_TARGETS_DEFAULT_ARGS} LIBRARY NAMELINK_SKIP)
 endif ()

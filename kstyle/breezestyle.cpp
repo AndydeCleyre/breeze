@@ -60,6 +60,10 @@
 #include <QTreeView>
 #include <QWidgetAction>
 
+#if BREEZE_HAVE_QTQUICK
+#include <QQuickWindow>
+#endif
+
 namespace BreezePrivate
 {
 
@@ -107,7 +111,7 @@ namespace BreezePrivate
         {}
 
         //* paint
-        void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+        void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
         {
             // call either proxy or parent class
             if( _proxy ) _proxy.data()->paint( painter, option, index );
@@ -115,7 +119,7 @@ namespace BreezePrivate
         }
 
         //* size hint for index
-        virtual QSize sizeHint( const QStyleOptionViewItem& option, const QModelIndex& index ) const
+        QSize sizeHint( const QStyleOptionViewItem& option, const QModelIndex& index ) const override
         {
 
             // get size from either proxy or parent class
@@ -140,7 +144,6 @@ namespace BreezePrivate
     };
 
     //_______________________________________________________________
-
     #if !BREEZE_USE_KDE4
     bool isProgressBarHorizontal( const QStyleOptionProgressBar* option )
     {  return option && ( (option->state & QStyle::State_Horizontal ) || option->orientation == Qt::Horizontal ); }
@@ -153,13 +156,11 @@ namespace Breeze
 
     //______________________________________________________________
     Style::Style():
-        _addLineButtons( SingleButton )
-        , _subLineButtons( SingleButton )
 
         #if BREEZE_USE_KDE4
-        , _helper( new Helper( "breeze" ) )
+        _helper( new Helper( "breeze" ) )
         #else
-        , _helper( new Helper( StyleConfigData::self()->sharedConfig() ) )
+        _helper( new Helper( StyleConfigData::self()->sharedConfig() ) )
         #endif
 
         , _shadowHelper( new ShadowHelper( this, *_helper ) )
@@ -193,7 +194,13 @@ namespace Breeze
             QStringLiteral( "/BreezeDecoration" ),
             QStringLiteral( "org.kde.Breeze.Style" ),
             QStringLiteral( "reparseConfiguration" ), this, SLOT(configurationChanged()) );
-
+        #if !BREEZE_USE_KDE4
+        #if QT_VERSION < 0x050D00 // Check if Qt version < 5.13
+        this->addEventFilter(qApp);
+        #else
+        connect(qApp, &QApplication::paletteChanged, this, &Style::configurationChanged);
+        #endif
+        #endif
         // call the slot directly; this initial call will set up things that also
         // need to be reset when the system palette changes
         loadConfiguration();
@@ -397,32 +404,6 @@ namespace Breeze
             auto font( scrollArea->font() );
             font.setBold( false );
             scrollArea->setFont( font );
-
-            // adjust background role
-            if( !StyleConfigData::sidePanelDrawFrame() )
-            {
-                scrollArea->setBackgroundRole( QPalette::Window );
-                scrollArea->setForegroundRole( QPalette::WindowText );
-
-                if( scrollArea->viewport() )
-                {
-                    scrollArea->viewport()->setBackgroundRole( QPalette::Window );
-                    scrollArea->viewport()->setForegroundRole( QPalette::WindowText );
-                }
-
-                // QTreeView animates expanding/collapsing branches. It paints them into a
-                // temp pixmap whose background is unconditionally filled with the palette's
-                // *base* color which is usually different from the window's color
-                // cf. QTreeViewPrivate::renderTreeToPixmapForAnimation()
-                if ( auto treeView = qobject_cast<QTreeView *>( scrollArea ) ) {
-                    if (treeView->isAnimated()) {
-                        QPalette pal( treeView->palette() );
-                        pal.setColor( QPalette::Active, QPalette::Base, treeView->palette().color( treeView->backgroundRole() ) );
-                        treeView->setPalette(pal);
-                    }
-                }
-            }
-
         }
 
         // disable autofill background for flat (== NoFrame) scrollareas, with QPalette::Window as a background
@@ -442,6 +423,22 @@ namespace Breeze
         {
             if( child->parent() == viewport && child->backgroundRole() == QPalette::Window )
             { child->setAutoFillBackground( false ); }
+        }
+
+        /*
+        QTreeView animates expanding/collapsing branches. It paints them into a
+        temp pixmap whose background is unconditionally filled with the palette's
+        *base* color which is usually different from the window's color
+        cf. QTreeViewPrivate::renderTreeToPixmapForAnimation()
+        */
+        if( auto treeView = qobject_cast<QTreeView *>( scrollArea ) )
+        {
+            if (treeView->isAnimated())
+            {
+                QPalette pal( treeView->palette() );
+                pal.setColor( QPalette::Active, QPalette::Base, treeView->palette().color( treeView->backgroundRole() ) );
+                treeView->setPalette(pal);
+            }
         }
 
     }
@@ -717,6 +714,7 @@ namespace Breeze
             case SE_ProgressBarGroove: return progressBarGrooveRect( option, widget );
             case SE_ProgressBarContents: return progressBarContentsRect( option, widget );
             case SE_ProgressBarLabel: return progressBarLabelRect( option, widget );
+            case SE_FrameContents: return frameContentsRect( option, widget );
             case SE_HeaderArrow: return headerArrowRect( option, widget );
             case SE_HeaderLabel: return headerLabelRect( option, widget );
             case SE_TabBarTabLeftButton: return tabBarTabLeftButtonRect( option, widget );
@@ -1030,6 +1028,9 @@ namespace Breeze
         #if QT_VERSION >= 0x050000
         else if( auto commandLinkButton = qobject_cast<QCommandLinkButton*>( object ) ) { return eventFilterCommandLinkButton( commandLinkButton, event ); }
         #endif
+        #if QT_VERSION < 0x050D00 // Check if Qt version < 5.13
+        else if( object == qApp && event->type() == QEvent::ApplicationPaletteChange ) { configurationChanged(); }
+        #endif
         // cast to QWidget
         QWidget *widget = static_cast<QWidget*>( object );
         if( widget->inherits( "QAbstractScrollArea" ) || widget->inherits( "KTextEditor::View" ) ) { return eventFilterScrollArea( widget, event ); }
@@ -1131,7 +1132,6 @@ namespace Breeze
                     QMouseEvent copy(
                         mouseEvent->type(),
                         position,
-                        scrollBar->mapToGlobal( position ),
                         mouseEvent->button(),
                         mouseEvent->buttons(), mouseEvent->modifiers());
 
@@ -1433,7 +1433,7 @@ namespace Breeze
         _shadowHelper->loadConfig();
 
         // set mdiwindow factory shadow tiles
-        _mdiWindowShadowFactory->setShadowTiles( _shadowHelper->shadowTiles() );
+        _mdiWindowShadowFactory->setShadowHelper( _shadowHelper );
 
         // clear icon cache
         _iconCache.clear();
@@ -1593,6 +1593,25 @@ namespace Breeze
 
         return indicatorRect;
 
+    }
+
+    //___________________________________________________________________________________________________________________
+    QRect Style::frameContentsRect( const QStyleOption* option, const QWidget* widget ) const
+    {
+        if( !StyleConfigData::sidePanelDrawFrame() &&
+            qobject_cast<const QAbstractScrollArea*>( widget ) &&
+            widget->property( PropertyNames::sidePanelView ).toBool() )
+        {
+
+            // adjust margins for sidepanel widgets
+            return option->rect.adjusted( 0, 0, -1, 0 );
+
+        } else {
+
+            // base class implementation
+            return ParentStyleClass::subElementRect( SE_FrameContents, option, widget );
+
+        }
     }
 
     //___________________________________________________________________________________________________________________
@@ -2144,7 +2163,7 @@ namespace Breeze
             case SC_ToolButtonMenu:
             {
 
-                // check fratures
+                // check features
                 if( !(hasPopupMenu || hasInlineIndicator ) ) return QRect();
 
                 // check features
@@ -2559,6 +2578,7 @@ namespace Breeze
 
         // add button width and spacing
         size.rwidth() += Metrics::MenuButton_IndicatorWidth+2;
+        size.rwidth() += Metrics::Button_ItemSpacing;
 
         return size;
 
@@ -3093,7 +3113,7 @@ namespace Breeze
         if( rect.height() < 2*Metrics::LineEdit_FrameWidth + option->fontMetrics.height())
         {
 
-            const auto background( palette.color( QPalette::Base ) );
+            const auto &background = palette.color( QPalette::Base );
 
             painter->setPen( Qt::NoPen );
             painter->setBrush( background );
@@ -3117,7 +3137,7 @@ namespace Breeze
             const qreal opacity( _animations->inputWidgetEngine().frameOpacity( widget ) );
 
             // render
-            const auto background( palette.color( QPalette::Base ) );
+            const auto &background = palette.color( QPalette::Base );
             const auto outline( _helper->frameOutlineColor( palette, mouseOver, hasFocus, opacity, mode ) );
             _helper->renderFrame( painter, rect, background, outline );
 
@@ -3406,9 +3426,12 @@ namespace Breeze
 
             // cast option
             const QStyleOptionToolButton* toolButtonOption( static_cast<const QStyleOptionToolButton*>( option ) );
-            const bool hasPopupMenu( toolButtonOption->subControls & SC_ToolButtonMenu );
+            const bool hasMenu(
+                ( toolButtonOption->subControls & SC_ToolButtonMenu ) ||
+                ( toolButtonOption->features&QStyleOptionToolButton::HasMenu
+                && toolButtonOption->features&QStyleOptionToolButton::PopupDelay ) );
             const bool sunken( state & (State_On | State_Sunken) );
-            if( flat && hasPopupMenu )
+            if( flat && hasMenu )
             {
 
                 if( sunken && !mouseOver ) color = palette.color( QPalette::HighlightedText );
@@ -3707,7 +3730,7 @@ namespace Breeze
         { _shadowHelper->registerWidget( widget->window(), true ); }
 
         const auto& palette( option->palette );
-        const auto background( palette.color( QPalette::ToolTipBase ) );
+        const auto &background = palette.color( QPalette::ToolTipBase );
         const auto outline( KColorUtils::mix( palette.color( QPalette::ToolTipBase ), palette.color( QPalette::ToolTipText ), 0.25 ) );
         const bool hasAlpha( _helper->hasAlphaChannel( widget ) );
 
@@ -3744,7 +3767,11 @@ namespace Breeze
 
         const bool hasCustomBackground = viewItemOption->backgroundBrush.style() != Qt::NoBrush && !( state & State_Selected );
         const bool hasSolidBackground = !hasCustomBackground || viewItemOption->backgroundBrush.style() == Qt::SolidPattern;
+        #if BREEZE_USE_KDE4
         const bool hasAlternateBackground( viewItemOption->features & QStyleOptionViewItemV2::Alternate );
+        #else
+        const bool hasAlternateBackground( viewItemOption->features & QStyleOptionViewItem::Alternate );
+        #endif
 
         // do nothing if no background is to be rendered
         if( !( mouseOver || selected || hasCustomBackground || hasAlternateBackground ) )
@@ -3756,7 +3783,7 @@ namespace Breeze
         else colorGroup = QPalette::Disabled;
 
         // render alternate background
-        if( viewItemOption && ( viewItemOption->features & QStyleOptionViewItemV2::Alternate ) )
+        if( hasAlternateBackground )
         {
             painter->setPen( Qt::NoPen );
             painter->setBrush( palette.brush( colorGroup, QPalette::AlternateBase ) );
@@ -3949,6 +3976,7 @@ namespace Breeze
         auto separatorRect( rect.adjusted( 0, 2, -2, -2 ) );
         separatorRect.setWidth( 1 );
         separatorRect = visualRect( option, separatorRect );
+        if( sunken ) separatorRect.translate( 1, 1 );
         _helper->renderSeparator( painter, separatorRect, outline, true );
 
         return true;
@@ -4566,7 +4594,16 @@ namespace Breeze
                     mode = QIcon::Disabled;
                 }
 
-                const auto pixmap = cb->currentIcon.pixmap(widget->windowHandle(), cb->iconSize, mode);
+                QWindow *window = nullptr;
+                if (widget && widget->window()) {
+                    window = widget->window()->windowHandle();
+#if BREEZE_HAVE_QTQUICK
+                } else if (QQuickItem *quickItem = qobject_cast<QQuickItem *>(option->styleObject)) {
+                    window = quickItem->window();
+#endif
+                }
+
+                const auto pixmap = cb->currentIcon.pixmap(window, cb->iconSize, mode);
                 auto iconRect(editRect);
                 iconRect.setWidth(cb->iconSize.width() + 4);
                 iconRect = alignedRect(cb->direction,
@@ -5007,7 +5044,7 @@ namespace Breeze
 
             const qreal progress( _animations->busyIndicatorEngine().value() );
 
-            const auto first( palette.color( QPalette::Highlight ) );
+            const auto &first = palette.color( QPalette::Highlight );
             const auto second( KColorUtils::mix( palette.color( QPalette::Highlight ), palette.color( QPalette::Window ), 0.7 ) );
             _helper->renderProgressBarBusyContents( painter, rect, first, second, horizontal, reverse, progress );
 
@@ -5235,7 +5272,7 @@ namespace Breeze
 
         // colors
         const auto& palette( option->palette );
-        const auto background( palette.color( QPalette::Window ) );
+        const auto &background = palette.color( QPalette::Window );
 
         // adjust rect, based on number of buttons to be drawn
         const auto rect( scrollBarInternalSubControlRect( sliderOption, SC_ScrollBarSubLine ) );
@@ -5389,7 +5426,7 @@ namespace Breeze
         const qreal opacity( _animations->headerViewEngine().opacity( widget, rect.topLeft() ) );
 
         // fill
-        const auto normal( palette.color( QPalette::Button ) );
+        const auto &normal = palette.color( QPalette::Button );
         const auto focus( KColorUtils::mix( normal, _helper->focusColor( palette ), 0.2 ) );
         const auto hover( KColorUtils::mix( normal, _helper->hoverColor( palette ), 0.2 ) );
 
@@ -6038,7 +6075,7 @@ namespace Breeze
         const bool isMenuTitle( this->isMenuTitle( widget ) );
         if( isMenuTitle )
         {
-            // copy option to adust state, and set font as not-bold
+            // copy option to adjust state, and set font as not-bold
             QStyleOptionToolButton copy( *toolButtonOption );
             copy.font.setBold( false );
             copy.state = State_Enabled;
@@ -6063,6 +6100,7 @@ namespace Breeze
         // frame
         if( toolButtonOption->subControls & SC_ToolButton )
         {
+            if( !flat ) copy.rect = buttonRect;
             if( inTabBar ) drawTabBarPanelButtonToolPrimitive( &copy, painter, widget );
             else drawPrimitive( PE_PanelButtonTool, &copy, painter, widget);
         }
@@ -6157,7 +6195,7 @@ namespace Breeze
                 if( flat )
                 {
 
-                    const auto background( palette.color( QPalette::Base ) );
+                    const auto &background = palette.color( QPalette::Base );
 
                     painter->setBrush( background );
                     painter->setPen( Qt::NoPen );
@@ -6285,7 +6323,7 @@ namespace Breeze
             if( flat )
             {
 
-                const auto background( palette.color( QPalette::Base ) );
+                const auto &background = palette.color( QPalette::Base );
 
                 painter->setBrush( background );
                 painter->setPen( Qt::NoPen );
@@ -6358,7 +6396,7 @@ namespace Breeze
 
                 // colors
                 const auto base( _helper->separatorColor( palette ) );
-                const auto highlight( palette.color( QPalette::Highlight ) );
+                const auto &highlight = palette.color( QPalette::Highlight );
 
                 while( current <= sliderOption->maximum )
                 {
@@ -6400,7 +6438,7 @@ namespace Breeze
                 auto handleRect( subControlRect( CC_Slider, sliderOption, SC_SliderHandle, widget ) );
 
                 // highlight color
-                const auto highlight( palette.color( QPalette::Highlight ) );
+                const auto &highlight = palette.color( QPalette::Highlight );
 
                 if( sliderOption->orientation == Qt::Horizontal )
                 {
@@ -6447,7 +6485,7 @@ namespace Breeze
             const qreal opacity( _animations->widgetStateEngine().buttonOpacity( widget ) );
 
             // define colors
-            const auto background( palette.color( QPalette::Button ) );
+            const auto &background = palette.color( QPalette::Button );
             const auto outline( _helper->sliderOutlineColor( palette, handleActive && mouseOver, hasFocus, opacity, mode ) );
             const auto shadow( _helper->shadowColor( palette ) );
 
@@ -6487,17 +6525,20 @@ namespace Breeze
             // groove
             const auto grooveColor( KColorUtils::mix( palette.color( QPalette::Window ), palette.color( QPalette::WindowText ), 0.3 ) );
 
+            // angles
+            const qreal first( dialAngle( sliderOption, sliderOption->minimum ) );
+            const qreal last( dialAngle( sliderOption, sliderOption->maximum ) );
+            
             // render groove
-            _helper->renderDialGroove( painter, grooveRect, grooveColor );
+            _helper->renderDialGroove( painter, grooveRect, grooveColor, first, last );
 
             if( enabled )
             {
 
                 // highlight
-                const auto highlight( palette.color( QPalette::Highlight ) );
+                const auto &highlight = palette.color( QPalette::Highlight );
 
                 // angles
-                const qreal first( dialAngle( sliderOption, sliderOption->minimum ) );
                 const qreal second( dialAngle( sliderOption, sliderOption->sliderPosition ) );
 
                 // render contents
@@ -6527,7 +6568,7 @@ namespace Breeze
             const qreal opacity( _animations->dialEngine().buttonOpacity( widget ) );
 
             // define colors
-            const auto background( palette.color( QPalette::Button ) );
+            const auto &background = palette.color( QPalette::Button );
             const auto outline( _helper->sliderOutlineColor( palette, handleActive && mouseOver, hasFocus, opacity, mode ) );
             const auto shadow( _helper->shadowColor( palette ) );
 
@@ -7158,7 +7199,7 @@ namespace Breeze
     //____________________________________________________________________
     bool Style::isQtQuickControl( const QStyleOption* option, const QWidget* widget ) const
     {
-        #if QT_VERSION >= 0x050000
+        #if QT_VERSION >= 0x050000 && BREEZE_HAVE_QTQUICK
         const bool is = (widget == nullptr) && option && option->styleObject && option->styleObject->inherits( "QQuickItem" );
         if ( is ) _windowManager->registerQuickItem( static_cast<QQuickItem*>( option->styleObject ) );
         return is;

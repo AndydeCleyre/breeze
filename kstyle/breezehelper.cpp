@@ -42,7 +42,7 @@ namespace Breeze
 
     //____________________________________________________________________
     Helper::Helper( KSharedConfig::Ptr config ):
-        _config( config )
+        _config( std::move( config ) )
     { init(); }
 
     //____________________________________________________________________
@@ -60,9 +60,9 @@ namespace Breeze
     //____________________________________________________________________
     void Helper::loadConfig()
     {
-        _viewFocusBrush = KStatefulBrush( KColorScheme::View, KColorScheme::FocusColor, _config );
-        _viewHoverBrush = KStatefulBrush( KColorScheme::View, KColorScheme::HoverColor, _config );
-        _viewNegativeTextBrush = KStatefulBrush( KColorScheme::View, KColorScheme::NegativeText, _config );
+        _viewFocusBrush = KStatefulBrush( KColorScheme::View, KColorScheme::FocusColor );
+        _viewHoverBrush = KStatefulBrush( KColorScheme::View, KColorScheme::HoverColor );
+        _viewNegativeTextBrush = KStatefulBrush( KColorScheme::View, KColorScheme::NegativeText );
 
         const QPalette palette( QApplication::palette() );
         const KConfigGroup group( _config->group( "WM" ) );
@@ -128,7 +128,7 @@ namespace Breeze
     {
 
         QColor outline( palette.color( QPalette::Inactive, QPalette::Highlight ) );
-        QColor focus( palette.color( QPalette::Active, QPalette::Highlight ) );
+        const QColor &focus = palette.color( QPalette::Active, QPalette::Highlight );
 
         if( mode == AnimationFocus )
         {
@@ -534,7 +534,7 @@ namespace Breeze
         if( !outline.isValid() ) return;
 
         // adjust rect
-        QRectF frameRect( rect.adjusted( 1, 1, -1, -1 ) );
+        QRectF frameRect( rect );
         frameRect.adjust( 0.5, 0.5, -0.5, -0.5 );
 
         // setup painter
@@ -546,22 +546,18 @@ namespace Breeze
         {
             default:
             case SideLeft:
-            frameRect.adjust( 0, 1, 0, -1 );
             painter->drawLine( frameRect.topRight(), frameRect.bottomRight() );
             break;
 
             case SideTop:
-            frameRect.adjust( 1, 0, -1, 0 );
             painter->drawLine( frameRect.topLeft(), frameRect.topRight() );
             break;
 
             case SideRight:
-            frameRect.adjust( 0, 1, 0, -1 );
             painter->drawLine( frameRect.topLeft(), frameRect.bottomLeft() );
             break;
 
             case SideBottom:
-            frameRect.adjust( 1, 0, -1, 0 );
             painter->drawLine( frameRect.bottomLeft(), frameRect.bottomRight() );
             break;
 
@@ -1056,7 +1052,8 @@ namespace Breeze
     //______________________________________________________________________________
     void Helper::renderDialGroove(
         QPainter* painter, const QRect& rect,
-        const QColor& color ) const
+        const QColor& color,
+        qreal first, qreal last ) const
     {
 
         // setup painter
@@ -1070,9 +1067,19 @@ namespace Breeze
             const qreal penWidth( Metrics::Slider_GrooveThickness );
             const QRectF grooveRect( rect.adjusted( penWidth/2, penWidth/2, -penWidth/2, -penWidth/2 ) );
 
-            painter->setPen( QPen( color, penWidth ) );
-            painter->setBrush( Qt::NoBrush );
-            painter->drawEllipse( grooveRect );
+            // setup angles
+            const int angleStart( first * 180 * 16 / M_PI );
+            const int angleSpan( (last - first ) * 180 * 16 / M_PI );
+            
+            // setup pen
+            if( angleSpan != 0 )
+            {
+                QPen pen( color, penWidth );
+                pen.setCapStyle( Qt::RoundCap );
+                painter->setPen( pen );
+                painter->setBrush( Qt::NoBrush );
+                painter->drawArc( grooveRect, angleStart, angleSpan );
+            }
         }
 
         
@@ -1297,15 +1304,14 @@ namespace Breeze
     //______________________________________________________________________________
     void Helper::renderArrow( QPainter* painter, const QRect& rect, const QColor& color, ArrowOrientation orientation ) const
     {
-
         // define polygon
         QPolygonF arrow;
         switch( orientation )
         {
-            case ArrowUp: arrow << QPointF( -4, 2 ) << QPointF( 0, -2 ) << QPointF( 4, 2 ); break;
-            case ArrowDown: arrow << QPointF( -4, -2 ) << QPointF( 0, 2 ) << QPointF( 4, -2 ); break;
-            case ArrowLeft: arrow << QPointF( 2, -4 ) << QPointF( -2, 0 ) << QPointF( 2, 4 ); break;
-            case ArrowRight: arrow << QPointF( -2, -4 ) << QPointF( 2, 0 ) << QPointF( -2, 4 ); break;
+            case ArrowUp: arrow = QVector<QPointF>{QPointF( -4, 2 ), QPointF( 0, -2 ), QPointF( 4, 2 )}; break;
+            case ArrowDown: arrow = QVector<QPointF>{QPointF( -4, -2 ), QPointF( 0, 2 ), QPointF( 4, -2 )}; break;
+            case ArrowLeft: arrow = QVector<QPointF>{QPointF( 2, -4 ), QPointF( -2, 0 ), QPointF( 2, 4 )}; break;
+            case ArrowRight: arrow = QVector<QPointF>{QPointF( -2, -4 ), QPointF( 2, 0 ), QPointF( -2, 4 )}; break;
             default: break;
         }
 
@@ -1367,20 +1373,20 @@ namespace Breeze
 
             case ButtonMaximize:
             {
-                painter->drawPolyline( QPolygonF()
-                    << QPointF( 4, 11 )
-                    << QPointF( 9, 6 )
-                    << QPointF( 14, 11 ) );
+                painter->drawPolyline( QVector<QPointF>{
+                    QPointF( 4, 11 ),
+                    QPointF( 9, 6 ),
+                    QPointF( 14, 11 )});
                 break;
             }
 
             case ButtonMinimize:
             {
 
-                painter->drawPolyline( QPolygonF()
-                    << QPointF( 4, 7 )
-                    << QPointF( 9, 12 )
-                    << QPointF( 14, 7 ) );
+                painter->drawPolyline(QVector<QPointF>{
+                    QPointF( 4, 7 ),
+                    QPointF( 9, 12 ),
+                    QPointF( 14, 7 )} );
                 break;
             }
 
@@ -1388,11 +1394,11 @@ namespace Breeze
             {
                 pen.setJoinStyle( Qt::RoundJoin );
                 painter->setPen( pen );
-                painter->drawPolygon( QPolygonF()
-                    << QPointF( 4.5, 9 )
-                    << QPointF( 9, 4.5 )
-                    << QPointF( 13.5, 9 )
-                    << QPointF( 9, 13.5 ) );
+                painter->drawPolygon( QVector<QPointF>{
+                    QPointF( 4.5, 9 ),
+                    QPointF( 9, 4.5 ),
+                    QPointF( 13.5, 9 ),
+                    QPointF( 9, 13.5 )});
                 break;
             }
 

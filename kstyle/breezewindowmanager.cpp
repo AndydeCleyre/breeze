@@ -62,6 +62,7 @@
 #include <QMenuBar>
 #include <QMouseEvent>
 #include <QProgressBar>
+#include <QScreen>
 #include <QScrollBar>
 #include <QStatusBar>
 #include <QStyle>
@@ -79,7 +80,7 @@
 #include <QWindow>
 #endif
 
-#if QT_VERSION >= 0x050000
+#if BREEZE_HAVE_QTQUICK
 // needed to enable dragging from QQuickWindows
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -141,7 +142,7 @@ namespace Breeze
         {}
 
         //* event filter
-        virtual bool eventFilter( QObject* object, QEvent* event )
+        bool eventFilter( QObject* object, QEvent* event ) override
         {
 
             if( event->type() == QEvent::MouseButtonRelease )
@@ -319,7 +320,7 @@ namespace Breeze
 
     }
 
-    #if !BREEZE_USE_KDE4
+    #if BREEZE_HAVE_QTQUICK
     //_____________________________________________________________
     void WindowManager::registerQuickItem( QQuickItem* item )
     {
@@ -390,7 +391,7 @@ namespace Breeze
 
             case QEvent::MouseMove:
             if ( object == _target.data()
-                #if !BREEZE_USE_KDE4
+                #if BREEZE_HAVE_QTQUICK
                 || object == _quickTarget.data()
                 #endif
                ) return mouseMoveEvent( object, event );
@@ -398,7 +399,7 @@ namespace Breeze
 
             case QEvent::MouseButtonRelease:
             if ( _target
-                #if !BREEZE_USE_KDE4
+                #if BREEZE_HAVE_QTQUICK
                 || _quickTarget
                 #endif
                ) return mouseReleaseEvent( object, event );
@@ -426,7 +427,9 @@ namespace Breeze
             { startDrag( _target.data()->window(), _globalDragPoint ); }
             #else
             if( _target ) startDrag( _target.data()->window()->windowHandle(), _globalDragPoint );
+            #if BREEZE_HAVE_QTQUICK
             else if( _quickTarget ) startDrag( _quickTarget.data()->window(), _globalDragPoint );
+            #endif
             #endif
 
         } else {
@@ -443,6 +446,10 @@ namespace Breeze
 
         // cast event and check buttons/modifiers
         auto mouseEvent = static_cast<QMouseEvent*>( event );
+        #if !BREEZE_USE_KDE4
+        if (mouseEvent->source() != Qt::MouseEventNotSynthesized)
+        { return false; }
+        #endif
         if( !( mouseEvent->modifiers() == Qt::NoModifier && mouseEvent->button() == Qt::LeftButton ) )
         { return false; }
 
@@ -450,7 +457,7 @@ namespace Breeze
         if( isLocked() ) return false;
         else setLocked( true );
 
-        #if !BREEZE_USE_KDE4
+        #if BREEZE_HAVE_QTQUICK
         // check QQuickItem - we can immediately start drag, because QQuickWindow's contentItem
         // only receives mouse events that weren't handled by children
         if( auto item = qobject_cast<QQuickItem*>( object ) )
@@ -507,6 +514,10 @@ namespace Breeze
 
         // cast event and check drag distance
         auto mouseEvent = static_cast<QMouseEvent*>( event );
+        #if !BREEZE_USE_KDE4
+        if (mouseEvent->source() != Qt::MouseEventNotSynthesized)
+        { return false; }
+        #endif
         if( !_dragInProgress )
         {
 
@@ -621,7 +632,7 @@ namespace Breeze
     bool WindowManager::isBlackListed( QWidget* widget )
     {
 
-        // check against noAnimations propery
+        // check against noAnimations property
         const auto propertyValue( widget->property( PropertyNames::noWindowGrab ) );
         if( propertyValue.isValid() && propertyValue.toBool() ) return true;
 
@@ -756,7 +767,11 @@ namespace Breeze
             // gather options to retrieve checkbox subcontrol rect
             QStyleOptionGroupBox opt;
             opt.initFrom( groupBox );
+            #if BREEZE_USE_KDE4
             if( groupBox->isFlat() ) opt.features |= QStyleOptionFrameV2::Flat;
+            #else
+            if( groupBox->isFlat() ) opt.features |= QStyleOptionFrame::Flat;
+            #endif
             opt.lineWidth = 1;
             opt.midLineWidth = 0;
             opt.text = groupBox->title();
@@ -837,7 +852,7 @@ namespace Breeze
         }
 
         _target.clear();
-        #if !BREEZE_USE_KDE4
+        #if BREEZE_HAVE_QTQUICK
         _quickTarget.clear();
         #endif
         if( _dragTimer.isActive() ) _dragTimer.stop();
@@ -880,23 +895,19 @@ namespace Breeze
         // connection
         auto connection( Helper::connection() );
 
-        #if QT_VERSION >= 0x050300
-        const qreal dpiRatio = window->devicePixelRatio();
-        #else
-        const qreal dpiRatio = 1;
-        #endif
-
         #if BREEZE_USE_KDE4
         auto net_connection = QX11Info::display();
+        const QPoint native = position;
         #else
         auto net_connection = connection;
+        const qreal dpiRatio = window->devicePixelRatio();
+        const QPoint origin = window->screen()->geometry().topLeft();
+        const QPoint native = (position - origin) * dpiRatio + origin;
         #endif
 
         xcb_ungrab_pointer( connection, XCB_TIME_CURRENT_TIME );
         NETRootInfo( net_connection, NET::WMMoveResize ).moveResizeRequest(
-            window->winId(), position.x() * dpiRatio,
-            position.y() * dpiRatio,
-            NET::Move );
+            window->winId(), native.x(), native.y(), NET::Move );
 
         #else
 

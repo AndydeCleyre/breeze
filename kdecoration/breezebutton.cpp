@@ -24,6 +24,7 @@
 #include <KColorUtils>
 
 #include <QPainter>
+#include <QVariantAnimation>
 
 namespace Breeze
 {
@@ -36,15 +37,17 @@ namespace Breeze
     //__________________________________________________________________
     Button::Button(DecorationButtonType type, Decoration* decoration, QObject* parent)
         : DecorationButton(type, decoration, parent)
-        , m_animation( new QPropertyAnimation( this ) )
+        , m_animation( new QVariantAnimation( this ) )
     {
 
         // setup animation
-        m_animation->setStartValue( 0 );
+        // It is important start and end value are of the same type, hence 0.0 and not just 0
+        m_animation->setStartValue( 0.0 );
         m_animation->setEndValue( 1.0 );
-        m_animation->setTargetObject( this );
-        m_animation->setPropertyName( "opacity" );
         m_animation->setEasingCurve( QEasingCurve::InOutQuad );
+        connect(m_animation, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+            setOpacity(value.toReal());
+        });
 
         // setup default geometry
         const int height = decoration->buttonHeight();
@@ -62,11 +65,14 @@ namespace Breeze
 
     //__________________________________________________________________
     Button::Button(QObject *parent, const QVariantList &args)
-        : DecorationButton(args.at(0).value<DecorationButtonType>(), args.at(1).value<Decoration*>(), parent)
-        , m_flag(FlagStandalone)
-        , m_animation( new QPropertyAnimation( this ) )
-    {}
-
+        : Button(args.at(0).value<DecorationButtonType>(), args.at(1).value<Decoration*>(), parent)
+    {
+        m_flag = FlagStandalone;
+        //! icon size must return to !valid because it was altered from the default constructor,
+        //! in Standalone mode the button is not using the decoration metrics but its geometry
+        m_iconSize = QSize(-1, -1);
+    }
+            
     //__________________________________________________________________
     Button *Button::create(DecorationButtonType type, KDecoration2::Decoration *decoration, QObject *parent)
     {
@@ -206,27 +212,27 @@ namespace Breeze
                         pen.setJoinStyle( Qt::RoundJoin );
                         painter->setPen( pen );
 
-                        painter->drawPolygon( QPolygonF()
-                            << QPointF( 4, 9 )
-                            << QPointF( 9, 4 )
-                            << QPointF( 14, 9 )
-                            << QPointF( 9, 14 ) );
+                        painter->drawPolygon( QVector<QPointF>{
+                            QPointF( 4, 9 ),
+                            QPointF( 9, 4 ),
+                            QPointF( 14, 9 ),
+                            QPointF( 9, 14 )} );
 
                     } else {
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 11 )
-                            << QPointF( 9, 6 )
-                            << QPointF( 14, 11 ) );
+                        painter->drawPolyline( QVector<QPointF>{
+                            QPointF( 4, 11 ),
+                            QPointF( 9, 6 ),
+                            QPointF( 14, 11 )});
                     }
                     break;
                 }
 
                 case DecorationButtonType::Minimize:
                 {
-                    painter->drawPolyline( QPolygonF()
-                        << QPointF( 4, 7 )
-                        << QPointF( 9, 12 )
-                        << QPointF( 14, 7 ) );
+                    painter->drawPolyline( QVector<QPointF>{
+                        QPointF( 4, 7 ),
+                        QPointF( 9, 12 ),
+                        QPointF( 14, 7 ) });
                     break;
                 }
 
@@ -254,11 +260,11 @@ namespace Breeze
 
                     } else {
 
-                        painter->drawPolygon( QPolygonF()
-                            << QPointF( 6.5, 8.5 )
-                            << QPointF( 12, 3 )
-                            << QPointF( 15, 6 )
-                            << QPointF( 9.5, 11.5 ) );
+                        painter->drawPolygon( QVector<QPointF> {
+                            QPointF( 6.5, 8.5 ),
+                            QPointF( 12, 3 ),
+                            QPointF( 15, 6 ),
+                            QPointF( 9.5, 11.5 )} );
 
                         painter->setPen( pen );
                         painter->drawLine( QPointF( 5.5, 7.5 ), QPointF( 10.5, 12.5 ) );
@@ -273,19 +279,19 @@ namespace Breeze
                     if (isChecked())
                     {
 
-                        painter->drawLine( 4, 5, 14, 5 );
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 8 )
-                            << QPointF( 9, 13 )
-                            << QPointF( 14, 8 ) );
+                        painter->drawLine( QPointF( 4, 5.5 ), QPointF( 14, 5.5 ) );
+                        painter->drawPolyline( QVector<QPointF> {
+                            QPointF( 4, 8 ),
+                            QPointF( 9, 13 ),
+                            QPointF( 14, 8 )} );
 
                     } else {
 
-                        painter->drawLine( 4, 5, 14, 5 );
-                        painter->drawPolyline( QPolygonF()
-                            << QPointF( 4, 13 )
-                            << QPointF( 9, 8 )
-                            << QPointF( 14, 13 ) );
+                        painter->drawLine( QPointF( 4, 5.5 ), QPointF( 14, 5.5 ) );
+                        painter->drawPolyline(  QVector<QPointF> {
+                            QPointF( 4, 13 ),
+                            QPointF( 9, 8 ),
+                            QPointF( 14, 13 ) });
                     }
 
                     break;
@@ -295,39 +301,39 @@ namespace Breeze
                 case DecorationButtonType::KeepBelow:
                 {
 
-                    painter->drawPolyline( QPolygonF()
-                        << QPointF( 4, 5 )
-                        << QPointF( 9, 10 )
-                        << QPointF( 14, 5 ) );
+                    painter->drawPolyline(  QVector<QPointF> {
+                        QPointF( 4, 5 ),
+                        QPointF( 9, 10 ),
+                        QPointF( 14, 5 ) });
 
-                    painter->drawPolyline( QPolygonF()
-                        << QPointF( 4, 9 )
-                        << QPointF( 9, 14 )
-                        << QPointF( 14, 9 ) );
+                    painter->drawPolyline(  QVector<QPointF> {
+                        QPointF( 4, 9 ),
+                        QPointF( 9, 14 ),
+                        QPointF( 14, 9 ) });
                     break;
 
                 }
 
                 case DecorationButtonType::KeepAbove:
                 {
-                    painter->drawPolyline( QPolygonF()
-                        << QPointF( 4, 9 )
-                        << QPointF( 9, 4 )
-                        << QPointF( 14, 9 ) );
+                    painter->drawPolyline(  QVector<QPointF> {
+                        QPointF( 4, 9 ),
+                        QPointF( 9, 4 ),
+                        QPointF( 14, 9 ) });
 
-                    painter->drawPolyline( QPolygonF()
-                        << QPointF( 4, 13 )
-                        << QPointF( 9, 8 )
-                        << QPointF( 14, 13 ) );
+                    painter->drawPolyline(  QVector<QPointF> {
+                        QPointF( 4, 13 ),
+                        QPointF( 9, 8 ),
+                        QPointF( 14, 13 ) });
                     break;
                 }
 
 
                 case DecorationButtonType::ApplicationMenu:
                 {
-                    painter->drawLine( QPointF( 3.5, 5 ), QPointF( 14.5, 5 ) );
-                    painter->drawLine( QPointF( 3.5, 9 ), QPointF( 14.5, 9 ) );
-                    painter->drawLine( QPointF( 3.5, 13 ), QPointF( 14.5, 13 ) );
+                    painter->drawRect( QRectF( 3.5, 4.5, 11, 1 ) );
+                    painter->drawRect( QRectF( 3.5, 8.5, 11, 1 ) );
+                    painter->drawRect( QRectF( 3.5, 12.5, 11, 1 ) );
                     break;
                 }
 
@@ -339,7 +345,7 @@ namespace Breeze
                     path.cubicTo( QPointF(12.5, 9.5), QPointF( 9, 7.5 ), QPointF( 9, 11.5 ) );
                     painter->drawPath( path );
 
-                    painter->drawPoint( 9, 15 );
+                    painter->drawRect( QRectF( 9, 15, 0.5, 0.5 ) );
 
                     break;
                 }
@@ -372,7 +378,7 @@ namespace Breeze
 
             return d->titleBarColor();
 
-        } else if( m_animation->state() == QPropertyAnimation::Running ) {
+        } else if( m_animation->state() == QAbstractAnimation::Running ) {
 
             return KColorUtils::mix( d->fontColor(), d->titleBarColor(), m_opacity );
 
@@ -408,7 +414,7 @@ namespace Breeze
 
             return d->fontColor();
 
-        } else if( m_animation->state() == QPropertyAnimation::Running ) {
+        } else if( m_animation->state() == QAbstractAnimation::Running ) {
 
             if( type() == DecorationButtonType::Close )
             {
@@ -467,8 +473,8 @@ namespace Breeze
         auto d = qobject_cast<Decoration*>(decoration());
         if( !(d && d->internalSettings()->animationsEnabled() ) ) return;
 
-        m_animation->setDirection( hovered ? QPropertyAnimation::Forward : QPropertyAnimation::Backward );
-        if( m_animation->state() != QPropertyAnimation::Running ) m_animation->start();
+        m_animation->setDirection( hovered ? QAbstractAnimation::Forward : QAbstractAnimation::Backward );
+        if( m_animation->state() != QAbstractAnimation::Running ) m_animation->start();
 
     }
 
